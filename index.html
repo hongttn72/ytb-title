@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Manager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        :root {
+            --primary: #ff0000;
+            --primary-dark: #cc0000;
+            --bg-main: #0f0f0f;
+            --bg-card: #1f1f1f;
+            --bg-hover: #2a2a2a;
+            --text-primary: #f1f1f1;
+            --text-secondary: #aaaaaa;
+            --border: #3f3f3f;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --info: #00aaff;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Be Vietnam Pro', sans-serif;
+            background: var(--bg-main);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            animation: fadeIn 0.6s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.95;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .success-banner {
+            background: var(--success);
+            color: var(--bg-main);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .api-setup {
+            background: var(--bg-card);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 2px solid var(--warning);
+            box-shadow: var(--shadow);
+        }
+        
+        .api-setup.active {
+            border-color: var(--success);
+        }
+        
+        .api-setup h2 {
+            color: var(--warning);
+            margin-bottom: 20px;
+        }
+        
+        .api-setup.active h2 {
+            color: var(--success);
+        }
+        
+        .api-input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .api-input-group input {
+            flex: 1;
+            min-width: 300px;
+            background: var(--bg-main);
+            border: 2px solid var(--border);
+            color: var(--text-primary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+        
+        .setup-steps {
+            background: var(--bg-main);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .setup-steps.show {
+            display: block;
+        }
+        
+        .setup-steps ol {
+            margin-left: 20px;
+        }
+        
+        .setup-steps li {
+            margin: 10px 0;
+            color: var(--text-secondary);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: var(--primary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+            margin-top: 5px;
+        }
+        
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Be Vietnam Pro', sans-serif;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        button:hover:not(:disabled) {
+            background: var(--primary-dark);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        button.secondary {
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+        }
+        
+        button.success {
+            background: var(--success);
+            color: var(--bg-main);
+        }
+        
+        .import-section {
+            background: var(--bg-card);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border);
+        }
+        
+        .import-section h2 {
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+        
+        .action-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .file-input-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 28px;
+            background: var(--bg-main);
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .progress-container.active {
+            display: block;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: var(--bg-main);
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--warning));
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+        }
+        
+        .progress-text {
+            color: var(--text-secondary);
+            text-align: center;
+        }
+        
+        .video-list {
+            background: var(--bg-card);
+            padding: 30px;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+        }
+        
+        .video-list h2 {
+            margin-bottom: 25px;
+            color: var(--primary);
+        }
+        
+        .video-item {
+            background: var(--bg-main);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border);
+        }
+        
+        .video-item.processing {
+            border-color: var(--warning);
+        }
+        
+        .video-item.completed {
+            border-color: var(--success);
+        }
+        
+        .video-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .video-number {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.85em;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .video-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .video-title-vn {
+            color: var(--text-secondary);
+            font-size: 0.95em;
+            font-style: italic;
+            margin-top: 5px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .status-badge.pending {
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+        }
+        
+        .status-badge.processing {
+            background: var(--warning);
+            color: var(--bg-main);
+        }
+        
+        .status-badge.completed {
+            background: var(--success);
+            color: var(--bg-main);
+        }
+        
+        .status-badge.error {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--success);
+            color: var(--bg-main);
+            padding: 16px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            z-index: 1000;
+            animation: toastIn 0.3s ease-out;
+        }
+        
+        .toast.error {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .toast.warning {
+            background: var(--warning);
+            color: var(--bg-main);
+        }
+        
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 YouTube Video Manager</h1>
+            <p class="subtitle">Dùng mọi nơi - Công ty & Nhà</p>
+        </header>
+        
+        <div class="success-banner">
+            ✅ Tool đang chạy online! Dùng được trên mọi máy tính có internet.
+        </div>
+        
+        <div class="api-setup" id="apiSetup">
+            <h2>🔑 YouTube API Key</h2>
+            <div class="api-input-group">
+                <input type="text" id="apiKeyInput" placeholder="Nhập API Key...">
+                <button onclick="saveApiKey()" class="success">💾 Lưu</button>
+                <button onclick="toggleGuide()" class="secondary">📖 Hướng dẫn</button>
+            </div>
+            
+            <div class="setup-steps" id="setupGuide">
+                <h3 style="color: var(--info);">Hướng dẫn lấy API Key (5 phút)</h3>
+                <ol>
+                    <li>Vào: https://console.cloud.google.com/</li>
+                    <li>Tạo project mới</li>
+                    <li>Enable "YouTube Data API v3"</li>
+                    <li>Tạo API Key</li>
+                    <li>Copy và paste vào ô trên</li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalVideos">0</div>
+                <div class="stat-label">Tổng Video</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalViews">0</div>
+                <div class="stat-label">Tổng View</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="completedCount">0</div>
+                <div class="stat-label">Hoàn thành</div>
+            </div>
+        </div>
+        
+        <div class="import-section">
+            <h2>📤 Import Excel</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                File cần 3 cột: STT, Kênh, Link video Youtube
+            </p>
+            
+            <div class="file-input-wrapper">
+                <input type="file" id="excelFile" accept=".xlsx,.xls" onchange="handleFileImport(event)">
+                <label class="file-input-label" for="excelFile">📁 Chọn file</label>
+            </div>
+            
+            <button onclick="downloadTemplate()" class="secondary" style="margin-left: 15px;">
+                📥 Tải file mẫu
+            </button>
+            
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill">0%</div>
+                </div>
+                <div class="progress-text" id="progressText">Đang xử lý...</div>
+            </div>
+        </div>
+        
+        <div class="action-bar">
+            <button onclick="autoFetch()" id="autoBtn" disabled>🤖 Tự động lấy dữ liệu</button>
+            <button onclick="exportExcel()">📊 Xuất Excel</button>
+            <button onclick="clearAll()" class="secondary">🗑️ Xóa tất cả</button>
+        </div>
+        
+        <div class="video-list">
+            <h2>📋 Danh sách (<span id="videoCount">0</span>)</h2>
+            <div id="videoListContainer"></div>
+        </div>
+    </div>
+    
+    <script>
+        let videos = [];
+        let apiKey = '';
+        let isProcessing = false;
+        
+        function loadData() {
+            const saved = localStorage.getItem('youtubeVideos');
+            if (saved) {
+                videos = JSON.parse(saved);
+                renderVideos();
+                updateStats();
+            }
+            
+            const savedKey = localStorage.getItem('youtubeApiKey');
+            if (savedKey) {
+                apiKey = savedKey;
+                document.getElementById('apiKeyInput').value = apiKey;
+                document.getElementById('apiSetup').classList.add('active');
+                updateButton();
+            }
+        }
+        
+        function saveData() {
+            localStorage.setItem('youtubeVideos', JSON.stringify(videos));
+        }
+        
+        function saveApiKey() {
+            const input = document.getElementById('apiKeyInput').value.trim();
+            if (!input) {
+                showToast('⚠️ Nhập API Key!', 'warning');
+                return;
+            }
+            apiKey = input;
+            localStorage.setItem('youtubeApiKey', apiKey);
+            document.getElementById('apiSetup').classList.add('active');
+            showToast('✅ Đã lưu!');
+            updateButton();
+        }
+        
+        function toggleGuide() {
+            const guide = document.getElementById('setupGuide');
+            guide.classList.toggle('show');
+        }
+        
+        function extractVideoId(url) {
+            const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
+            return match ? match[1] : null;
+        }
+        
+        async function fetchVideoData(videoId) {
+            const url = `/api/youtube?videoId=${videoId}&apiKey=${apiKey}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('API error');
+            const data = await response.json();
+            
+            // Translate title
+            const titleVN = await translateText(data.title);
+            
+            return {
+                title: data.title,
+                titleVN: titleVN,
+                thumbnail: data.thumbnail,
+                views: data.views,
+                script: data.description
+            };
+        }
+        
+        async function translateText(text) {
+            try {
+                const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.substring(0, 500))}&langpair=en|vi`;
+                const res = await fetch(url);
+                const data = await res.json();
+                return data?.responseData?.translatedText || text;
+            } catch {
+                return text;
+            }
+        }
+        
+        function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet);
+                    
+                    videos = jsonData.map((row, i) => ({
+                        id: Date.now() + i,
+                        number: row['STT'] || i + 1,
+                        channel: row['Kênh'] || '',
+                        videoLink: row['Link video Youtube'] || '',
+                        title: '',
+                        titleVN: '',
+                        script: '',
+                        thumbnail: '',
+                        views: 0,
+                        status: 'pending'
+                    })).filter(v => v.videoLink);
+                    
+                    saveData();
+                    renderVideos();
+                    updateStats();
+                    updateButton();
+                    showToast(`✅ Import ${videos.length} video!`);
+                } catch (error) {
+                    showToast('❌ Lỗi đọc file!', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        async function autoFetch() {
+            if (!apiKey || videos.length === 0 || isProcessing) return;
+            
+            isProcessing = true;
+            document.getElementById('autoBtn').disabled = true;
+            document.getElementById('progressContainer').classList.add('active');
+            
+            let completed = 0;
+            const total = videos.length;
+            
+            for (let video of videos) {
+                if (video.status === 'completed' && video.title) {
+                    completed++;
+                    updateProgress(completed, total);
+                    continue;
+                }
+                
+                video.status = 'processing';
+                renderVideos();
+                
+                try {
+                    const videoId = extractVideoId(video.videoLink);
+                    if (!videoId) throw new Error('Link không hợp lệ');
+                    
+                    const data = await fetchVideoData(videoId);
+                    Object.assign(video, data);
+                    video.status = 'completed';
+                    
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch (error) {
+                    video.status = 'error';
+                    video.title = `[Lỗi] ${error.message}`;
+                }
+                
+                completed++;
+                updateProgress(completed, total);
+                saveData();
+                renderVideos();
+                updateStats();
+            }
+            
+            isProcessing = false;
+            document.getElementById('autoBtn').disabled = false;
+            document.getElementById('progressContainer').classList.remove('active');
+            showToast(`🎉 Xong ${completed}/${total}!`);
+        }
+        
+        function updateProgress(current, total) {
+            const pct = Math.round((current / total) * 100);
+            document.getElementById('progressFill').style.width = pct + '%';
+            document.getElementById('progressFill').textContent = pct + '%';
+            document.getElementById('progressText').textContent = `${current}/${total}`;
+        }
+        
+        function updateButton() {
+            document.getElementById('autoBtn').disabled = !apiKey || videos.length === 0;
+        }
+        
+        function renderVideos() {
+            const container = document.getElementById('videoListContainer');
+            document.getElementById('videoCount').textContent = videos.length;
+            
+            if (videos.length === 0) {
+                container.innerHTML = '<div class="empty-state"><h3>Chưa có video</h3></div>';
+                return;
+            }
+            
+            container.innerHTML = videos.map(v => {
+                let badge = '';
+                if (v.status === 'pending') badge = '<span class="status-badge pending">⏳ Chờ</span>';
+                if (v.status === 'processing') badge = '<span class="status-badge processing">🔄 Đang xử lý</span>';
+                if (v.status === 'completed') badge = '<span class="status-badge completed">✅ Xong</span>';
+                if (v.status === 'error') badge = '<span class="status-badge error">❌ Lỗi</span>';
+                
+                return `
+                    <div class="video-item ${v.status}">
+                        <div class="video-header">
+                            <div style="flex: 1;">
+                                <span class="video-number">#${v.number}</span>
+                                ${badge}
+                                <div class="video-title">${v.title || 'Chưa có dữ liệu'}</div>
+                                ${v.titleVN ? `<div class="video-title-vn">${v.titleVN}</div>` : ''}
+                                <div style="margin-top: 10px; font-size: 0.9em; color: var(--text-secondary);">
+                                    📺 ${v.channel} • 👁️ ${v.views.toLocaleString('vi-VN')}
+                                </div>
+                            </div>
+                            <button onclick="deleteVideo(${v.id})" style="background: transparent; border: 2px solid var(--border); color: var(--text-secondary);">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function deleteVideo(id) {
+            if (confirm('Xóa video này?')) {
+                videos = videos.filter(v => v.id !== id);
+                videos.forEach((v, i) => v.number = i + 1);
+                saveData();
+                renderVideos();
+                updateStats();
+                updateButton();
+            }
+        }
+        
+        function clearAll() {
+            if (confirm('Xóa tất cả?')) {
+                videos = [];
+                saveData();
+                renderVideos();
+                updateStats();
+                updateButton();
+            }
+        }
+        
+        function updateStats() {
+            document.getElementById('totalVideos').textContent = videos.length;
+            document.getElementById('totalViews').textContent = videos.reduce((s, v) => s + v.views, 0).toLocaleString('vi-VN');
+            document.getElementById('completedCount').textContent = videos.filter(v => v.status === 'completed').length;
+        }
+        
+        function exportExcel() {
+            if (videos.length === 0) {
+                showToast('⚠️ Không có dữ liệu!', 'warning');
+                return;
+            }
+            
+            const data = videos.map(v => ({
+                'STT': v.number,
+                'Kênh': v.channel,
+                'Link video Youtube': v.videoLink,
+                'Tiêu đề': v.title,
+                'Tiêu đề tiếng việt': v.titleVN,
+                'Phụ đề video': v.script,
+                'Link thumbnail': v.thumbnail,
+                'Số view': v.views
+            }));
+            
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(data);
+            ws['!cols'] = [
+                { wch: 8 }, { wch: 20 }, { wch: 50 }, { wch: 50 },
+                { wch: 50 }, { wch: 80 }, { wch: 50 }, { wch: 15 }
+            ];
+            
+            XLSX.utils.book_append_sheet(wb, ws, 'Videos');
+            XLSX.writeFile(wb, `youtube-${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast('📊 Đã xuất Excel!');
+        }
+        
+        function downloadTemplate() {
+            const data = [
+                { 'STT': 1, 'Kênh': 'TechViet', 'Link video Youtube': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+                { 'STT': 2, 'Kênh': 'TechViet', 'Link video Youtube': 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }
+            ];
+            
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(data);
+            ws['!cols'] = [{ wch: 8 }, { wch: 20 }, { wch: 50 }];
+            XLSX.utils.book_append_sheet(wb, ws, 'Template');
+            XLSX.writeFile(wb, 'youtube-template.xlsx');
+            showToast('📥 Đã tải file mẫu!');
+        }
+        
+        function showToast(msg, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        
+        loadData();
+    </script>
+</body>
+</html>
