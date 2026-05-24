@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -545,20 +545,37 @@
         }
         
         async function fetchVideoData(videoId) {
-            const url = `/api/youtube?videoId=${videoId}&apiKey=${apiKey}`;
+            // Call YouTube API directly
+            const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoId}&key=${apiKey}`;
             const response = await fetch(url);
-            if (!response.ok) throw new Error('API error');
+            
+            if (!response.ok) {
+                throw new Error('API request failed');
+            }
+            
             const data = await response.json();
             
+            // Check for API errors
+            if (data.error) {
+                throw new Error(data.error.message || 'YouTube API error');
+            }
+            
+            // Check if video exists
+            if (!data.items || data.items.length === 0) {
+                throw new Error('Video not found');
+            }
+            
+            const video = data.items[0];
+            
             // Translate title
-            const titleVN = await translateText(data.title);
+            const titleVN = await translateText(video.snippet.title);
             
             return {
-                title: data.title,
+                title: video.snippet.title,
                 titleVN: titleVN,
-                thumbnail: data.thumbnail,
-                views: data.views,
-                script: data.description
+                thumbnail: video.snippet.thumbnails.maxres?.url || video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default?.url,
+                views: parseInt(video.statistics.viewCount) || 0,
+                script: (video.snippet.description || '').substring(0, 3000)
             };
         }
         
