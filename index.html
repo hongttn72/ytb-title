@@ -850,30 +850,94 @@
     async function fetchTranscriptViaProxy(videoId) {
         var proxies = [
             function(u){ return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
-            function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); }
+            function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+            function(u){ return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); }
         ];
+        // Try innertube API first (most reliable)
         for (var i = 0; i < proxies.length; i++) {
             try {
-                var pageUrl = 'https://www.youtube.com/watch?v=' + videoId;
-                var r = await fetch(proxies[i](pageUrl));
-                if (!r.ok) continue;
-                var html = await r.text();
-                var m = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;\s*(?:var|<\/script>)/);
-                if (!m) continue;
-                var pr;
-                try { pr = JSON.parse(m[1]); } catch(e) { continue; }
-                var tracks = (pr.captions && pr.captions.playerCaptionsTracklistRenderer && pr.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
-                if (!tracks.length) return '';
-                var track = tracks.find(function(t){return t.languageCode==='en'&&!t.kind;}) || tracks.find(function(t){return t.languageCode==='en';}) || tracks[0];
-                var capUrl = track.baseUrl + '&fmt=json3';
-                var r2 = await fetch(proxies[i](capUrl));
-                if (!r2.ok) continue;
-                var cd = await r2.json();
-                var text = (cd.events || []).filter(function(e){return e.segs;}).map(function(e){return e.segs.map(function(s){return s.utf8||'';}).join('');}).join(' ').replace(/\s+/g,' ').trim();
-                return text;
-            } catch(e) { continue; }
+                var t = await fetchViaInnertube(videoId, proxies[i]);
+                if (t) return t;
+            } catch(e) {}
+        }
+        // Fallback: parse watch page HTML
+        for (var j = 0; j < proxies.length; j++) {
+            try {
+                var t2 = await fetchViaWatchPage(videoId, proxies[j]);
+                if (t2) return t2;
+            } catch(e) {}
         }
         return '';
+    }
+
+    async function fetchViaInnertube(videoId, proxy) {
+        var url = 'https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8&prettyPrint=false';
+        var body = JSON.stringify({
+            context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en' } },
+            videoId: videoId
+        });
+        var r = await fetch(proxy(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body });
+        if (!r.ok) return '';
+        var data = await r.json();
+        var tracks = (data.captions && data.captions.playerCaptionsTracklistRenderer && data.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
+        return await fetchCaption(tracks, proxy);
+    }
+
+    async function fetchViaWatchPage(videoId, proxy) {
+        var pageUrl = 'https://www.youtube.com/watch?v=' + videoId + '&hl=en';
+        var r = await fetch(proxy(pageUrl));
+        if (!r.ok) return '';
+        var html = await r.text();
+        var json = extractPlayerResponse(html);
+        if (!json) return '';
+        var pr;
+        try { pr = JSON.parse(json); } catch(e) { return ''; }
+        var tracks = (pr.captions && pr.captions.playerCaptionsTracklistRenderer && pr.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
+        return await fetchCaption(tracks, proxy);
+    }
+
+    function extractPlayerResponse(html) {
+        var idx = html.indexOf('ytInitialPlayerResponse');
+        if (idx < 0) return null;
+        var eq = html.indexOf('=', idx);
+        if (eq < 0) return null;
+        var start = eq + 1;
+        while (start < html.length && (html[start] === ' ' || html[start] === '\n' || html[start] === '\r' || html[start] === '\t')) start++;
+        if (html[start] !== '{') return null;
+        var depth = 0, inStr = false, esc = false;
+        for (var i = start; i < html.length; i++) {
+            var c = html[i];
+            if (inStr) {
+                if (esc) esc = false;
+                else if (c === '\\') esc = true;
+                else if (c === '"') inStr = false;
+            } else {
+                if (c === '"') inStr = true;
+                else if (c === '{') depth++;
+                else if (c === '}') { depth--; if (depth === 0) return html.substring(start, i + 1); }
+            }
+        }
+        return null;
+    }
+
+    async function fetchCaption(tracks, proxy) {
+        if (!tracks || !tracks.length) return '';
+        var track = tracks.find(function(t){return t.languageCode==='en'&&!t.kind;})
+            || tracks.find(function(t){return t.languageCode==='en';})
+            || tracks.find(function(t){return t.languageCode==='vi';})
+            || tracks[0];
+        var capUrl = track.baseUrl + '&fmt=json3';
+        var r = await fetch(proxy(capUrl));
+        if (!r.ok) return '';
+        var text = await r.text();
+        var cd;
+        try { cd = JSON.parse(text); } catch(e) { return ''; }
+        return (cd.events || [])
+            .filter(function(e){return e.segs;})
+            .map(function(e){return e.segs.map(function(s){return s.utf8||'';}).join('');})
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
     }
 
     async function fetchSingle() {
