@@ -818,7 +818,7 @@
     }
 
     async function fetchVideoInfo(videoId) {
-        var url = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=' + videoId + '&key=' + apiKey;
+        var url = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=' + videoId + '&key=' + apiKey;
         var r = await fetch(url);
         var d = await r.json();
         if (d.error) throw new Error(d.error.message || 'YouTube API error');
@@ -829,115 +829,18 @@
             title: v.snippet.title,
             channelTitle: v.snippet.channelTitle,
             thumbnail: (thumbs.maxres && thumbs.maxres.url) || (thumbs.high && thumbs.high.url) || (thumbs.default && thumbs.default.url) || '',
-            views: parseInt(v.statistics.viewCount) || 0
+            views: parseInt(v.statistics.viewCount) || 0,
+            duration: formatDuration(v.contentDetails && v.contentDetails.duration)
         };
     }
 
-    async function fetchTranscript(videoId) {
-        try {
-            var r = await fetch('/api/transcript?videoId=' + encodeURIComponent(videoId));
-            if (r.ok) {
-                var ct = r.headers.get('content-type') || '';
-                if (ct.indexOf('json') !== -1) {
-                    var d = await r.json();
-                    if (d.transcript) return d.transcript;
-                }
-            }
-        } catch(e) {}
-        return await fetchTranscriptViaProxy(videoId);
-    }
-
-    async function fetchTranscriptViaProxy(videoId) {
-        var proxies = [
-            function(u){ return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
-            function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
-            function(u){ return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); }
-        ];
-        // Try innertube API first (most reliable)
-        for (var i = 0; i < proxies.length; i++) {
-            try {
-                var t = await fetchViaInnertube(videoId, proxies[i]);
-                if (t) return t;
-            } catch(e) {}
-        }
-        // Fallback: parse watch page HTML
-        for (var j = 0; j < proxies.length; j++) {
-            try {
-                var t2 = await fetchViaWatchPage(videoId, proxies[j]);
-                if (t2) return t2;
-            } catch(e) {}
-        }
-        return '';
-    }
-
-    async function fetchViaInnertube(videoId, proxy) {
-        var url = 'https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8&prettyPrint=false';
-        var body = JSON.stringify({
-            context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en' } },
-            videoId: videoId
-        });
-        var r = await fetch(proxy(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body });
-        if (!r.ok) return '';
-        var data = await r.json();
-        var tracks = (data.captions && data.captions.playerCaptionsTracklistRenderer && data.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
-        return await fetchCaption(tracks, proxy);
-    }
-
-    async function fetchViaWatchPage(videoId, proxy) {
-        var pageUrl = 'https://www.youtube.com/watch?v=' + videoId + '&hl=en';
-        var r = await fetch(proxy(pageUrl));
-        if (!r.ok) return '';
-        var html = await r.text();
-        var json = extractPlayerResponse(html);
-        if (!json) return '';
-        var pr;
-        try { pr = JSON.parse(json); } catch(e) { return ''; }
-        var tracks = (pr.captions && pr.captions.playerCaptionsTracklistRenderer && pr.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
-        return await fetchCaption(tracks, proxy);
-    }
-
-    function extractPlayerResponse(html) {
-        var idx = html.indexOf('ytInitialPlayerResponse');
-        if (idx < 0) return null;
-        var eq = html.indexOf('=', idx);
-        if (eq < 0) return null;
-        var start = eq + 1;
-        while (start < html.length && (html[start] === ' ' || html[start] === '\n' || html[start] === '\r' || html[start] === '\t')) start++;
-        if (html[start] !== '{') return null;
-        var depth = 0, inStr = false, esc = false;
-        for (var i = start; i < html.length; i++) {
-            var c = html[i];
-            if (inStr) {
-                if (esc) esc = false;
-                else if (c === '\\') esc = true;
-                else if (c === '"') inStr = false;
-            } else {
-                if (c === '"') inStr = true;
-                else if (c === '{') depth++;
-                else if (c === '}') { depth--; if (depth === 0) return html.substring(start, i + 1); }
-            }
-        }
-        return null;
-    }
-
-    async function fetchCaption(tracks, proxy) {
-        if (!tracks || !tracks.length) return '';
-        var track = tracks.find(function(t){return t.languageCode==='en'&&!t.kind;})
-            || tracks.find(function(t){return t.languageCode==='en';})
-            || tracks.find(function(t){return t.languageCode==='vi';})
-            || tracks[0];
-        var capUrl = track.baseUrl + '&fmt=json3';
-        var r = await fetch(proxy(capUrl));
-        if (!r.ok) return '';
-        var text = await r.text();
-        var cd;
-        try { cd = JSON.parse(text); } catch(e) { return ''; }
-        return (cd.events || [])
-            .filter(function(e){return e.segs;})
-            .map(function(e){return e.segs.map(function(s){return s.utf8||'';}).join('');})
-            .join(' ')
-            .replace(/\s+/g, ' ')
-            .trim();
+    function formatDuration(iso) {
+        if (!iso) return '';
+        var m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (!m) return '';
+        var h = parseInt(m[1]||0), mi = parseInt(m[2]||0), s = parseInt(m[3]||0);
+        var pad = function(n){return n<10?'0'+n:''+n;};
+        return h > 0 ? (h + ':' + pad(mi) + ':' + pad(s)) : (mi + ':' + pad(s));
     }
 
     async function fetchSingle() {
@@ -959,7 +862,7 @@
             titleVN: '',
             thumbnail: '',
             views: 0,
-            transcript: null,
+            duration: '',
             status: 'processing'
         };
         videos.push(vid);
@@ -972,16 +875,11 @@
             vid.channelTitle = data.channelTitle || '';
             vid.thumbnail = data.thumbnail || '';
             vid.views = data.views || 0;
+            vid.duration = data.duration || '';
             vid.titleVN = await translateText(vid.title);
             vid.status = 'completed';
-            vid.transcript = 'loading';
             saveData();
             renderAll();
-            fetchTranscript(videoId).then(function(t) {
-                vid.transcript = t;
-                saveData();
-                patchTranscript(vid.id, vid);
-            });
         } catch(err) {
             vid.status = 'error';
             vid.title = '[ERROR] ' + err.message;
@@ -1009,7 +907,8 @@
                         title: '',
                         titleVN: '',
                         thumbnail: '',
-                        transcript: null,
+                        views: 0,
+                        duration: '',
                         status: 'pending'
                     };
                 }).filter(function(v) { return v.videoLink; });
@@ -1058,18 +957,11 @@
                 vid.channelTitle = data.channelTitle || '';
                 vid.thumbnail = data.thumbnail || '';
                 vid.views = data.views || 0;
+                vid.duration = data.duration || '';
                 vid.titleVN = await translateText(vid.title);
                 vid.status = 'completed';
-                vid.transcript = 'loading';
                 saveData();
                 renderAll();
-                (function(v, id) {
-                    fetchTranscript(id).then(function(t) {
-                        v.transcript = t;
-                        saveData();
-                        patchTranscript(v.id, v);
-                    });
-                })(vid, videoId);
                 await delay(800);
             } catch(err) {
                 vid.status = 'error';
@@ -1129,10 +1021,10 @@
         var thumbHtml = v.thumbnail
             ? '<img src="' + escHtml(v.thumbnail) + '" alt="thumb" loading="lazy">'
             : '<div class="video-thumb-placeholder">NO THUMB</div>';
-        var transcriptHtml = buildTranscriptSection(v);
         var thumbLink = v.thumbnail
             ? '<a href="' + escHtml(v.thumbnail) + '" target="_blank">' + escHtml(v.thumbnail.substring(0, 70)) + '...</a>'
             : '<span style="opacity:0.4">&#x2014;</span>';
+        var viewsFmt = (v.views || 0).toLocaleString('vi-VN');
 
         return '<div class="video-item ' + v.status + '" id="vid-' + v.id + '">' +
             '<div class="video-inner">' +
@@ -1153,77 +1045,26 @@
                     '<div class="field-row"><span class="field-label">Link video</span><span class="field-val"><a href="' + escHtml(v.videoLink) + '" target="_blank">' + escHtml(v.videoLink) + '</a></span></div>' +
                     '<div class="field-row"><span class="field-label">Ti\xEAu đề</span><span class="field-val title-main">' + (escHtml(v.title) || '<span style="opacity:0.4">&#x2014;</span>') + '</span></div>' +
                     '<div class="field-row"><span class="field-label">Ti\xEAu đề tiếng Việt</span><span class="field-val" style="font-style:italic; color:rgba(226,232,240,0.75)">' + (escHtml(v.titleVN) || '<span style="opacity:0.4">&#x2014;</span>') + '</span></div>' +
+                    '<div class="field-row"><span class="field-label">Thời lượng</span><span class="field-val" style="font-family:\'JetBrains Mono\',monospace; color:var(--cyan);">' + (escHtml(v.duration) || '<span style="opacity:0.4">&#x2014;</span>') + '</span></div>' +
+                    '<div class="field-row"><span class="field-label">Số view</span><span class="field-val" style="font-family:\'JetBrains Mono\',monospace; color:var(--success);">' + viewsFmt + '</span></div>' +
                     '<div class="field-row"><span class="field-label">Link ảnh thumbnail</span><span class="field-val">' + thumbLink + '</span></div>' +
-                    transcriptHtml +
                 '</div>' +
             '</div>' +
         '</div>';
-    }
-
-    function buildTranscriptSection(v) {
-        if (v.transcript === null) return '';
-        if (v.transcript === 'loading') {
-            return '<div class="transcript-wrap" id="transcript-' + v.id + '"><div class="transcript-loading"><span class="spinner"></span> LOADING TRANSCRIPT...</div></div>';
-        }
-        if (!v.transcript) {
-            return '<div class="transcript-wrap" id="transcript-' + v.id + '">' +
-                '<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
-                    '<span style="font-family:\'JetBrains Mono\',monospace;font-size:0.68rem;color:rgba(0,255,255,0.3);">TRANSCRIPT: NOT AVAILABLE</span>' +
-                    '<button class="btn btn-secondary" style="padding:3px 10px; font-size:0.62rem;" onclick="openPasteTranscript(' + v.id + ')">&#x270E; PASTE MANUALLY</button>' +
-                    '<button class="btn btn-secondary" style="padding:3px 10px; font-size:0.62rem;" onclick="retryTranscript(' + v.id + ')">&#x27F3; RETRY</button>' +
-                '</div>' +
-            '</div>';
-        }
-        var wordCount = v.transcript.split(' ').length;
-        return '<div class="transcript-wrap" id="transcript-' + v.id + '">' +
-            '<div style="display:flex; align-items:center; gap:10px;">' +
-                '<button class="transcript-toggle" onclick="toggleTranscript(' + v.id + ', this)">&#x25BA; TRANSCRIPT <span style="opacity:0.5;font-size:0.6rem;">(' + wordCount + ' words)</span></button>' +
-                '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.6rem;" onclick="openPasteTranscript(' + v.id + ')">&#x270E; EDIT</button>' +
-            '</div>' +
-            '<div class="transcript-body" id="tbody-' + v.id + '">' + escHtml(v.transcript) + '</div>' +
-        '</div>';
-    }
-
-    function openPasteTranscript(id) {
-        var v = videos.find(function(x){return x.id===id;});
-        if (!v) return;
-        var current = (v.transcript && v.transcript !== 'loading') ? v.transcript : '';
-        var text = prompt('Dán transcript (lấy từ vidIQ / YouTube Summary / nguồn khác):', current);
-        if (text === null) return;
-        v.transcript = text.trim();
-        saveData();
-        renderAll();
-        showToast('TRANSCRIPT UPDATED', 'success');
-    }
-
-    function retryTranscript(id) {
-        var v = videos.find(function(x){return x.id===id;});
-        if (!v) return;
-        var videoId = extractVideoId(v.videoLink);
-        if (!videoId) return;
-        v.transcript = 'loading';
-        renderAll();
-        fetchTranscript(videoId).then(function(t) {
-            v.transcript = t;
-            saveData();
-            patchTranscript(v.id, v);
-            showToast(t ? 'TRANSCRIPT LOADED' : 'STILL NOT AVAILABLE', t ? 'success' : 'warning');
-        });
     }
 
     function copyVideoInfo(id, btn) {
         var v = videos.find(function(x){return x.id===id;});
         if (!v) return;
-        var transcript = (v.transcript && v.transcript !== 'loading') ? v.transcript : '';
         var text = 'STT: ' + v.number + '\n' +
                    'Kênh: ' + (v.channel || '') + '\n' +
                    'Tên kênh YouTube: ' + (v.channelTitle || '') + '\n' +
                    'Link video: ' + (v.videoLink || '') + '\n' +
                    'Tiêu đề: ' + (v.title || '') + '\n' +
                    'Tiêu đề tiếng Việt: ' + (v.titleVN || '') + '\n' +
-                   'Link ảnh thumbnail: ' + (v.thumbnail || '') + '\n' +
+                   'Thời lượng: ' + (v.duration || '') + '\n' +
                    'Số view: ' + (v.views || 0) + '\n' +
-                   'Transcript: ' + transcript;
+                   'Link ảnh thumbnail: ' + (v.thumbnail || '');
         var done = function(){ var old = btn.innerHTML; btn.innerHTML = '&#x2713; COPIED'; setTimeout(function(){btn.innerHTML = old;}, 1500); showToast('COPIED TO CLIPBOARD', 'success'); };
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(done).catch(function(){ fallbackCopy(text); done(); });
@@ -1236,23 +1077,6 @@
         document.body.appendChild(ta); ta.select();
         try { document.execCommand('copy'); } catch(e) {}
         document.body.removeChild(ta);
-    }
-
-    function patchTranscript(id, vid) {
-        var el = document.getElementById('transcript-' + id);
-        if (!el) return;
-        var newHtml = buildTranscriptSection(vid);
-        var tmp = document.createElement('div');
-        tmp.innerHTML = newHtml;
-        el.replaceWith(tmp.firstChild);
-    }
-
-    function toggleTranscript(id, btn) {
-        var body = document.getElementById('tbody-' + id);
-        if (!body) return;
-        body.classList.toggle('expanded');
-        var isExp = body.classList.contains('expanded');
-        btn.innerHTML = btn.innerHTML.replace(isExp ? '&#x25BA;' : '&#x25BC;', isExp ? '&#x25BC;' : '&#x25BA;');
     }
 
     function updateChannel(id, val) {
@@ -1285,14 +1109,14 @@
                 'Link video': v.videoLink,
                 'Ti\xEAu đề': v.title,
                 'Ti\xEAu đề tiếng Việt': v.titleVN,
-                'Link ảnh thumbnail': v.thumbnail,
+                'Thời lượng': v.duration || '',
                 'Số view': v.views || 0,
-                'Transcript': (v.transcript && v.transcript !== 'loading') ? v.transcript : ''
+                'Link ảnh thumbnail': v.thumbnail
             };
         });
         var wb = XLSX.utils.book_new();
         var ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [{wch:6},{wch:20},{wch:30},{wch:55},{wch:60},{wch:60},{wch:60},{wch:15},{wch:100}];
+        ws['!cols'] = [{wch:6},{wch:20},{wch:30},{wch:55},{wch:60},{wch:60},{wch:12},{wch:15},{wch:60}];
         XLSX.utils.book_append_sheet(wb, ws, 'Videos');
         XLSX.writeFile(wb, 'ytb-export-' + new Date().toISOString().split('T')[0] + '.xlsx');
         showToast('EXCEL EXPORTED', 'success');
