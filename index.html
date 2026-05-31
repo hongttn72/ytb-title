@@ -818,15 +818,27 @@
     }
 
     async function fetchVideoInfo(videoId) {
-        var r = await fetch('/api/youtube?videoId=' + encodeURIComponent(videoId) + '&apiKey=' + encodeURIComponent(apiKey));
+        var url = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=' + videoId + '&key=' + apiKey;
+        var r = await fetch(url);
         var d = await r.json();
-        if (d.error) throw new Error(d.error);
-        return d;
+        if (d.error) throw new Error(d.error.message || 'YouTube API error');
+        if (!d.items || d.items.length === 0) throw new Error('Video not found');
+        var v = d.items[0];
+        var thumbs = v.snippet.thumbnails || {};
+        return {
+            title: v.snippet.title,
+            channelTitle: v.snippet.channelTitle,
+            thumbnail: (thumbs.maxres && thumbs.maxres.url) || (thumbs.high && thumbs.high.url) || (thumbs.default && thumbs.default.url) || '',
+            views: parseInt(v.statistics.viewCount) || 0
+        };
     }
 
     async function fetchTranscript(videoId) {
         try {
             var r = await fetch('/api/transcript?videoId=' + encodeURIComponent(videoId));
+            if (!r.ok) return '';
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('json') === -1) return '';
             var d = await r.json();
             return d.transcript || '';
         } catch(e) { return ''; }
@@ -850,6 +862,7 @@
             title: '',
             titleVN: '',
             thumbnail: '',
+            views: 0,
             transcript: null,
             status: 'processing'
         };
@@ -862,6 +875,7 @@
             vid.title = data.title || '';
             vid.channelTitle = data.channelTitle || '';
             vid.thumbnail = data.thumbnail || '';
+            vid.views = data.views || 0;
             vid.titleVN = await translateText(vid.title);
             vid.status = 'completed';
             vid.transcript = 'loading';
@@ -947,6 +961,7 @@
                 vid.title = data.title || '';
                 vid.channelTitle = data.channelTitle || '';
                 vid.thumbnail = data.thumbnail || '';
+                vid.views = data.views || 0;
                 vid.titleVN = await translateText(vid.title);
                 vid.status = 'completed';
                 vid.transcript = 'loading';
@@ -1109,12 +1124,13 @@
                 'Ti\xEAu đề': v.title,
                 'Ti\xEAu đề tiếng Việt': v.titleVN,
                 'Link ảnh thumbnail': v.thumbnail,
+                'Số view': v.views || 0,
                 'Transcript': (v.transcript && v.transcript !== 'loading') ? v.transcript : ''
             };
         });
         var wb = XLSX.utils.book_new();
         var ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [{wch:6},{wch:20},{wch:30},{wch:55},{wch:60},{wch:60},{wch:60},{wch:100}];
+        ws['!cols'] = [{wch:6},{wch:20},{wch:30},{wch:55},{wch:60},{wch:60},{wch:60},{wch:15},{wch:100}];
         XLSX.utils.book_append_sheet(wb, ws, 'Videos');
         XLSX.writeFile(wb, 'ytb-export-' + new Date().toISOString().split('T')[0] + '.xlsx');
         showToast('EXCEL EXPORTED', 'success');
