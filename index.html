@@ -836,12 +836,44 @@
     async function fetchTranscript(videoId) {
         try {
             var r = await fetch('/api/transcript?videoId=' + encodeURIComponent(videoId));
-            if (!r.ok) return '';
-            var ct = r.headers.get('content-type') || '';
-            if (ct.indexOf('json') === -1) return '';
-            var d = await r.json();
-            return d.transcript || '';
-        } catch(e) { return ''; }
+            if (r.ok) {
+                var ct = r.headers.get('content-type') || '';
+                if (ct.indexOf('json') !== -1) {
+                    var d = await r.json();
+                    if (d.transcript) return d.transcript;
+                }
+            }
+        } catch(e) {}
+        return await fetchTranscriptViaProxy(videoId);
+    }
+
+    async function fetchTranscriptViaProxy(videoId) {
+        var proxies = [
+            function(u){ return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
+            function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); }
+        ];
+        for (var i = 0; i < proxies.length; i++) {
+            try {
+                var pageUrl = 'https://www.youtube.com/watch?v=' + videoId;
+                var r = await fetch(proxies[i](pageUrl));
+                if (!r.ok) continue;
+                var html = await r.text();
+                var m = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;\s*(?:var|<\/script>)/);
+                if (!m) continue;
+                var pr;
+                try { pr = JSON.parse(m[1]); } catch(e) { continue; }
+                var tracks = (pr.captions && pr.captions.playerCaptionsTracklistRenderer && pr.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
+                if (!tracks.length) return '';
+                var track = tracks.find(function(t){return t.languageCode==='en'&&!t.kind;}) || tracks.find(function(t){return t.languageCode==='en';}) || tracks[0];
+                var capUrl = track.baseUrl + '&fmt=json3';
+                var r2 = await fetch(proxies[i](capUrl));
+                if (!r2.ok) continue;
+                var cd = await r2.json();
+                var text = (cd.events || []).filter(function(e){return e.segs;}).map(function(e){return e.segs.map(function(s){return s.utf8||'';}).join('');}).join(' ').replace(/\s+/g,' ').trim();
+                return text;
+            } catch(e) { continue; }
+        }
+        return '';
     }
 
     async function fetchSingle() {
@@ -1047,7 +1079,10 @@
                             '<span class="video-num">#' + String(v.number).padStart(3,'0') + '</span>' +
                             '<span class="video-status ' + v.status + '">' + spinnerHtml + ' ' + statusLabel + '</span>' +
                         '</div>' +
-                        '<button class="btn btn-danger" style="padding:4px 10px; font-size:0.65rem;" onclick="deleteVideo(' + v.id + ')">&#x2715;</button>' +
+                        '<div style="display:flex;gap:6px;">' +
+                            '<button class="btn btn-success" style="padding:4px 10px; font-size:0.65rem;" onclick="copyVideoInfo(' + v.id + ', this)" title="Copy toàn bộ thông tin">&#x2398; COPY</button>' +
+                            '<button class="btn btn-danger" style="padding:4px 10px; font-size:0.65rem;" onclick="deleteVideo(' + v.id + ')">&#x2715;</button>' +
+                        '</div>' +
                     '</div>' +
                     '<div class="field-row"><span class="field-label">K\xEAnh</span><span class="field-val"><input class="kenh-edit" value="' + escHtml(v.channel) + '" placeholder="-- edit --" onchange="updateChannel(' + v.id + ', this.value)"></span></div>' +
                     '<div class="field-row"><span class="field-label">T\xEAn k\xEAnh YouTube</span><span class="field-val">' + (escHtml(v.channelTitle) || '<span style="opacity:0.4">&#x2014;</span>') + '</span></div>' +
@@ -1074,6 +1109,33 @@
             '<button class="transcript-toggle" onclick="toggleTranscript(' + v.id + ', this)">&#x25BA; TRANSCRIPT <span style="opacity:0.5;font-size:0.6rem;">(' + wordCount + ' words)</span></button>' +
             '<div class="transcript-body" id="tbody-' + v.id + '">' + escHtml(v.transcript) + '</div>' +
         '</div>';
+    }
+
+    function copyVideoInfo(id, btn) {
+        var v = videos.find(function(x){return x.id===id;});
+        if (!v) return;
+        var transcript = (v.transcript && v.transcript !== 'loading') ? v.transcript : '';
+        var text = 'STT: ' + v.number + '\n' +
+                   'Kênh: ' + (v.channel || '') + '\n' +
+                   'Tên kênh YouTube: ' + (v.channelTitle || '') + '\n' +
+                   'Link video: ' + (v.videoLink || '') + '\n' +
+                   'Tiêu đề: ' + (v.title || '') + '\n' +
+                   'Tiêu đề tiếng Việt: ' + (v.titleVN || '') + '\n' +
+                   'Link ảnh thumbnail: ' + (v.thumbnail || '') + '\n' +
+                   'Số view: ' + (v.views || 0) + '\n' +
+                   'Transcript: ' + transcript;
+        var done = function(){ var old = btn.innerHTML; btn.innerHTML = '&#x2713; COPIED'; setTimeout(function(){btn.innerHTML = old;}, 1500); showToast('COPIED TO CLIPBOARD', 'success'); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(function(){ fallbackCopy(text); done(); });
+        } else { fallbackCopy(text); done(); }
+    }
+
+    function fallbackCopy(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch(e) {}
+        document.body.removeChild(ta);
     }
 
     function patchTranscript(id, vid) {
