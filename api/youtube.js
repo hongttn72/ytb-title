@@ -18,7 +18,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Missing parameters' });
         }
         
-        const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoId}&key=${apiKey}`;
+        const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoId}&key=${apiKey}`;
         const response = await fetch(url);
         const data = await response.json();
         
@@ -34,9 +34,11 @@ export default async function handler(req, res) {
         
         return res.status(200).json({
             title: video.snippet.title,
+            channelTitle: video.snippet.channelTitle,
             description: (video.snippet.description || '').substring(0, 3000),
             thumbnail: video.snippet.thumbnails.maxres?.url || video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default?.url,
-            views: parseInt(video.statistics.viewCount) || 0
+            views: parseInt(video.statistics.viewCount) || 0,
+            duration: video.contentDetails?.duration || ''
         });
         
     } catch (error) {
