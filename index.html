@@ -672,6 +672,11 @@
             <button class="btn btn-success" onclick="saveApiKey()">&#x2713; SAVE</button>
             <button class="btn btn-secondary" onclick="toggleGuide()">? GUIDE</button>
         </div>
+        <div class="api-row" style="margin-top:8px;">
+            <input type="password" class="holo-input" id="deeplKeyInput" placeholder="PASTE DEEPL API KEY (for better translation)...">
+            <button class="btn btn-success" onclick="saveDeeplKey()">&#x2713; SAVE</button>
+            <a class="btn btn-secondary" href="https://www.deepl.com/pro-api" target="_blank">? GET KEY</a>
+        </div>
         <div class="guide-steps" id="guideSteps">
             <ol>
                 <li>Go to <a href="https://console.cloud.google.com/" target="_blank">console.cloud.google.com</a></li>
@@ -753,6 +758,7 @@
 <script>
     var videos = [];
     var apiKey = '';
+    var deeplKey = '';
     var isProcessing = false;
 
     function loadData() {
@@ -764,6 +770,11 @@
         if (savedKey) {
             apiKey = savedKey;
             document.getElementById('apiKeyInput').value = apiKey;
+        }
+        var savedDeepL = localStorage.getItem('ytb_deeplkey');
+        if (savedDeepL) {
+            deeplKey = savedDeepL;
+            document.getElementById('deeplKeyInput').value = deeplKey;
         }
         renderAll();
     }
@@ -779,6 +790,14 @@
         localStorage.setItem('ytb_apikey', apiKey);
         showToast('API KEY SAVED', 'success');
         updateAutoBtn();
+    }
+
+    function saveDeeplKey() {
+        var v = document.getElementById('deeplKeyInput').value.trim();
+        if (!v) { showToast('ENTER DEEPL API KEY', 'warning'); return; }
+        deeplKey = v;
+        localStorage.setItem('ytb_deeplkey', deeplKey);
+        showToast('DEEPL KEY SAVED', 'success');
     }
 
     function toggleGuide() {
@@ -810,10 +829,26 @@
     }
 
     async function translateText(text) {
+        var t = String(text).substring(0, 500);
+        if (deeplKey) {
+            try {
+                var isFree = deeplKey.endsWith(':fx');
+                var endpoint = isFree
+                    ? 'https://api-free.deepl.com/v2/translate'
+                    : 'https://api.deepl.com/v2/translate';
+                var r = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'auth_key=' + encodeURIComponent(deeplKey) + '&text=' + encodeURIComponent(t) + '&target_lang=VI'
+                });
+                var d = await r.json();
+                if (d && d.translations && d.translations[0]) return d.translations[0].text;
+            } catch(e) {}
+        }
         try {
-            var r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(String(text).substring(0, 500)) + '&langpair=en|vi');
-            var d = await r.json();
-            return (d && d.responseData && d.responseData.translatedText) ? d.responseData.translatedText : text;
+            var r2 = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(t) + '&langpair=en|vi');
+            var d2 = await r2.json();
+            return (d2 && d2.responseData && d2.responseData.translatedText) ? d2.responseData.translatedText : text;
         } catch(e) { return text; }
     }
 
