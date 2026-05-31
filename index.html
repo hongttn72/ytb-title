@@ -846,9 +846,17 @@
             } catch(e) {}
         }
         try {
-            var r2 = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(t) + '&langpair=en|vi');
+            var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=vi&dt=t&q=' + encodeURIComponent(t);
+            var r2 = await fetch(url);
             var d2 = await r2.json();
-            return (d2 && d2.responseData && d2.responseData.translatedText) ? d2.responseData.translatedText : text;
+            if (d2 && d2[0]) {
+                return d2[0].map(function(s){ return s[0]; }).join('');
+            }
+        } catch(e) {}
+        try {
+            var r3 = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(t) + '&langpair=en|vi');
+            var d3 = await r3.json();
+            return (d3 && d3.responseData && d3.responseData.translatedText) ? d3.responseData.translatedText : text;
         } catch(e) { return text; }
     }
 
