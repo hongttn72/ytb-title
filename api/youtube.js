@@ -34,6 +34,7 @@ export default async function handler(req, res) {
         
         return res.status(200).json({
             title: video.snippet.title,
+            channelTitle: video.snippet.channelTitle,
             description: (video.snippet.description || '').substring(0, 3000),
             thumbnail: video.snippet.thumbnails.maxres?.url || video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default?.url,
             views: parseInt(video.statistics.viewCount) || 0
