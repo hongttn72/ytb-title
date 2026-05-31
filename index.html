@@ -1166,13 +1166,49 @@
             return '<div class="transcript-wrap" id="transcript-' + v.id + '"><div class="transcript-loading"><span class="spinner"></span> LOADING TRANSCRIPT...</div></div>';
         }
         if (!v.transcript) {
-            return '<div class="transcript-wrap" id="transcript-' + v.id + '"><div style="font-family:\'JetBrains Mono\',monospace;font-size:0.68rem;color:rgba(0,255,255,0.3);">TRANSCRIPT: NOT AVAILABLE</div></div>';
+            return '<div class="transcript-wrap" id="transcript-' + v.id + '">' +
+                '<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
+                    '<span style="font-family:\'JetBrains Mono\',monospace;font-size:0.68rem;color:rgba(0,255,255,0.3);">TRANSCRIPT: NOT AVAILABLE</span>' +
+                    '<button class="btn btn-secondary" style="padding:3px 10px; font-size:0.62rem;" onclick="openPasteTranscript(' + v.id + ')">&#x270E; PASTE MANUALLY</button>' +
+                    '<button class="btn btn-secondary" style="padding:3px 10px; font-size:0.62rem;" onclick="retryTranscript(' + v.id + ')">&#x27F3; RETRY</button>' +
+                '</div>' +
+            '</div>';
         }
         var wordCount = v.transcript.split(' ').length;
         return '<div class="transcript-wrap" id="transcript-' + v.id + '">' +
-            '<button class="transcript-toggle" onclick="toggleTranscript(' + v.id + ', this)">&#x25BA; TRANSCRIPT <span style="opacity:0.5;font-size:0.6rem;">(' + wordCount + ' words)</span></button>' +
+            '<div style="display:flex; align-items:center; gap:10px;">' +
+                '<button class="transcript-toggle" onclick="toggleTranscript(' + v.id + ', this)">&#x25BA; TRANSCRIPT <span style="opacity:0.5;font-size:0.6rem;">(' + wordCount + ' words)</span></button>' +
+                '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.6rem;" onclick="openPasteTranscript(' + v.id + ')">&#x270E; EDIT</button>' +
+            '</div>' +
             '<div class="transcript-body" id="tbody-' + v.id + '">' + escHtml(v.transcript) + '</div>' +
         '</div>';
+    }
+
+    function openPasteTranscript(id) {
+        var v = videos.find(function(x){return x.id===id;});
+        if (!v) return;
+        var current = (v.transcript && v.transcript !== 'loading') ? v.transcript : '';
+        var text = prompt('Dán transcript (lấy từ vidIQ / YouTube Summary / nguồn khác):', current);
+        if (text === null) return;
+        v.transcript = text.trim();
+        saveData();
+        renderAll();
+        showToast('TRANSCRIPT UPDATED', 'success');
+    }
+
+    function retryTranscript(id) {
+        var v = videos.find(function(x){return x.id===id;});
+        if (!v) return;
+        var videoId = extractVideoId(v.videoLink);
+        if (!videoId) return;
+        v.transcript = 'loading';
+        renderAll();
+        fetchTranscript(videoId).then(function(t) {
+            v.transcript = t;
+            saveData();
+            patchTranscript(v.id, v);
+            showToast(t ? 'TRANSCRIPT LOADED' : 'STILL NOT AVAILABLE', t ? 'success' : 'warning');
+        });
     }
 
     function copyVideoInfo(id, btn) {
