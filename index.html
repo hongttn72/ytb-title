@@ -1055,7 +1055,7 @@
             c.innerHTML = '<div class="empty-state">// NO DATA LOADED. IMPORT EXCEL OR PASTE A LINK.</div>';
             return;
         }
-        c.innerHTML = videos.map(renderVideoCard).join('');
+        c.innerHTML = videos.slice().reverse().map(renderVideoCard).join('');
     }
 
     function renderVideoCard(v) {
@@ -1098,12 +1098,10 @@
     function copyVideoInfo(id, btn) {
         var v = videos.find(function(x){return x.id===id;});
         if (!v) return;
-        var text = 'STT: ' + v.number + '\n' +
-                   'Kênh: ' + (v.channel || '') + '\n' +
-                   'Tên kênh YouTube: ' + (v.channelTitle || '') + '\n' +
+        var text = 'Tên kênh: ' + (v.channelTitle || '') + '\n' +
                    'Link video: ' + (v.videoLink || '') + '\n' +
                    'Tiêu đề: ' + (v.title || '') + '\n' +
-                   'Tiêu đề tiếng Việt: ' + (v.titleVN || '') + '\n' +
+                   'Tiêu đề TV: ' + (v.titleVN || '') + '\n' +
                    'Thời lượng: ' + (v.duration || '') + '\n' +
                    'Số view: ' + (v.views || 0) + '\n' +
                    'Link ảnh thumbnail: ' + (v.thumbnail || '');
