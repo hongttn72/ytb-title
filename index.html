@@ -828,6 +828,18 @@
             .replace(/"/g, '&quot;');
     }
 
+    async function translateToEN(text) {
+        try {
+            var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&dt=ld&q=' + encodeURIComponent(String(text).substring(0, 500));
+            var r = await fetch(url);
+            var d = await r.json();
+            var detectedLang = (d[8] && d[8][3] && d[8][3][0]) ? d[8][3][0] : 'en';
+            if (detectedLang === 'en') return text;
+            if (d && d[0]) return d[0].map(function(s){ return s[0]; }).join('');
+        } catch(e) {}
+        return text;
+    }
+
     async function translateText(text) {
         var t = String(text).substring(0, 500);
         if (deeplKey) {
@@ -902,6 +914,7 @@
             channelTitle: '',
             videoLink: url,
             title: '',
+            titleEN: '',
             titleVN: '',
             thumbnail: '',
             views: 0,
@@ -919,6 +932,7 @@
             vid.thumbnail = data.thumbnail || '';
             vid.views = data.views || 0;
             vid.duration = data.duration || '';
+            vid.titleEN = await translateToEN(vid.title);
             vid.titleVN = await translateText(vid.title);
             vid.status = 'completed';
             saveData();
@@ -1001,6 +1015,7 @@
                 vid.thumbnail = data.thumbnail || '';
                 vid.views = data.views || 0;
                 vid.duration = data.duration || '';
+                vid.titleEN = await translateToEN(vid.title);
                 vid.titleVN = await translateText(vid.title);
                 vid.status = 'completed';
                 saveData();
@@ -1098,17 +1113,29 @@
     function copyVideoInfo(id, btn) {
         var v = videos.find(function(x){return x.id===id;});
         if (!v) return;
-        var text = 'Tên kênh: ' + (v.channelTitle || '') + '\n' +
-                   'Link video: ' + (v.videoLink || '') + '\n' +
-                   'Tiêu đề: ' + (v.title || '') + '\n' +
-                   'Tiêu đề TV: ' + (v.titleVN || '') + '\n' +
-                   'Thời lượng: ' + (v.duration || '') + '\n' +
-                   'Số view: ' + (v.views || 0) + '\n' +
-                   'Link ảnh thumbnail: ' + (v.thumbnail || '');
+        var titleLine = v.titleEN || v.title || '';
+        var plain = 'Tên kênh: ' + (v.channelTitle || '') + '\n' +
+                    'Link video: ' + (v.videoLink || '') + '\n' +
+                    'Tiêu đề: ' + titleLine + '\n' +
+                    'Tiêu đề TV: ' + (v.titleVN || '') + '\n' +
+                    'Thời lượng: ' + (v.duration || '') + '\n' +
+                    'View: ' + (v.views || 0) + '\n' +
+                    'Link thumbnail: ' + (v.thumbnail || '');
+        var html = 'Tên kênh: ' + escHtml(v.channelTitle || '') + '<br>' +
+                   'Link video: ' + escHtml(v.videoLink || '') + '<br>' +
+                   'Tiêu đề: <b><span style="font-size:14pt">' + escHtml(titleLine) + '</span></b><br>' +
+                   'Tiêu đề TV: ' + escHtml(v.titleVN || '') + '<br>' +
+                   'Thời lượng: ' + escHtml(v.duration || '') + '<br>' +
+                   'View: ' + (v.views || 0) + '<br>' +
+                   'Link thumbnail: ' + escHtml(v.thumbnail || '');
         var done = function(){ var old = btn.innerHTML; btn.innerHTML = '&#x2713; COPIED'; setTimeout(function(){btn.innerHTML = old;}, 1500); showToast('COPIED TO CLIPBOARD', 'success'); };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(done).catch(function(){ fallbackCopy(text); done(); });
-        } else { fallbackCopy(text); done(); }
+        if (navigator.clipboard && window.ClipboardItem) {
+            var blob_html = new Blob([html], {type: 'text/html'});
+            var blob_text = new Blob([plain], {type: 'text/plain'});
+            navigator.clipboard.write([new ClipboardItem({'text/html': blob_html, 'text/plain': blob_text})]).then(done).catch(function(){ fallbackCopy(plain); done(); });
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(plain).then(done).catch(function(){ fallbackCopy(plain); done(); });
+        } else { fallbackCopy(plain); done(); }
     }
 
     function fallbackCopy(text) {
